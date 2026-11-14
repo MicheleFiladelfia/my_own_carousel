@@ -34,6 +34,12 @@
 #include "common/shaders.h"
 #include "common/simple_shapes.h"
 #include "common/trackball.h"
+#include "common/texture.h"
+
+#define TINYGLTF_IMPLEMENTATION
+#define TINYGLTF_NO_INCLUDE_STB_IMAGE
+#define TINYGLTF_NO_INCLUDE_STB_IMAGE_WRITE
+#include "common/gltf_loader.h"
 
 trackball tb[2];
 int curr_tb;
@@ -109,14 +115,25 @@ glm::vec3 get_sky_color(float sun_height){
 	return glm::mix(night_sky, day_sky, day_factor);
 }
 
+struct CarModel {
+    std::vector<renderable> meshes;
+    box3 bbox;
+    float scale;
+    glm::vec3 center;
+};
+
 int main(int argc, char **argv) {
+  srand(time(NULL));
   race r;
 
   carousel_loader::load("small_test.svg", "terrain_256.png", r);
 
-  // add 10 cars
-  for (int i = 0; i < 10; ++i)
-    r.add_car();
+  // add 10 cars with semirandom position
+  for (int i = 0; i < 10; ++i) {
+    float var = ((rand() % 100) / 100.0f - 0.5f) * 0.04f;
+    float position = (float(i) / 10.0f) + var;
+    r.add_car(position);
+  }
 
   GLFWwindow *window;
 
@@ -222,14 +239,43 @@ int main(int argc, char **argv) {
   glUniformMatrix4fv(basic_shader["uProj"], 1, GL_FALSE, &proj[0][0]);
   glUniformMatrix4fv(basic_shader["uView"], 1, GL_FALSE, &view[0][0]);
 
-  r.start(18, 30, 0, 1800); //time settings
+  //cars models
+  std::vector<CarModel> car_models;
+  std::vector<std::string> car_files = {
+    "3dmodels/garbage-truck.glb",
+    "3dmodels/ambulance.glb",
+    "3dmodels/police.glb",
+    "3dmodels/sedan.glb",
+    "3dmodels/taxi.glb",
+    "3dmodels/suv.glb",
+    "3dmodels/firetruck.glb",
+    "3dmodels/race.glb"
+};
+
+for (const auto& f : car_files) {
+    CarModel cm;
+    gltf_loader loader;
+    loader.load_to_renderable(f, cm.meshes, cm.bbox);
+    cm.scale = 3.5f / cm.bbox.diagonal();
+    cm.center = cm.bbox.center();
+    car_models.push_back(cm);
+}
+
+  //textures
+  texture grass_tex, asphalt_tex;
+  grass_tex.load("grass_texture.jpg", 0);
+  asphalt_tex.load("asphalt_texture.png", 1);
+
+  r.start(18, 30, 0, 900); //time settings
   r.update();
 
   matrix_stack stack;
 
   glEnable(GL_DEPTH_TEST);
+  int seed = rand();
   /* Loop until the user closes the window */
   while (!glfwWindowShouldClose(window)) {
+    srand(seed);
     /* Render here */
 
     // sky color
@@ -252,6 +298,9 @@ int main(int argc, char **argv) {
         glm::mat3(tb[curr_tb].matrix()) * r.sunlight_direction();
     glm::vec3 sun_dir_view = glm::mat3(view) * (-rotated_sun);
     glUniform3fv(basic_shader["uSunDirView"], 1, &sun_dir_view[0]);
+
+    float sun_intensity = glm::clamp(-r.sunlight_direction().y * 4.0f, 0.0f, 1.0f);
+    glUniform1f(basic_shader["uSunIntensity"], sun_intensity);    
 
     auto update_model_and_normal = [&](const glm::mat4 &model_mat) {
       glUniformMatrix4fv(basic_shader["uModel"], 1, GL_FALSE, &model_mat[0][0]);
@@ -292,29 +341,58 @@ int main(int argc, char **argv) {
     stack.mult(glm::translate(glm::mat4(1.f), -c));
 
     // terrain (illuminato, opaco)
+    glUniform1i(basic_shader["uUseVertexUV"], 0);
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(1.0f, 1.0f);
     update_model_and_normal(stack.m());
     glUniform3f(basic_shader["uColor"], 0.2f, 0.6f, 0.2f);
     glUniform1i(basic_shader["uLightingEnabled"], 1);
     glUniform1f(basic_shader["uSpecularStrength"], 0.02f);
+
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, grass_tex.id);
+    glUniform1i(basic_shader["uTexture"], 0);
+    glUniform1i(basic_shader["uUseTexture"], 1);
+
     r_terrain.bind();
     glDrawElements(r_terrain().mode, r_terrain().count, r_terrain().itype, 0);
     glDisable(GL_POLYGON_OFFSET_FILL);
 
+    glUniform1i(basic_shader["uUseTexture"], 0);
+
     // cars (carrozzeria lucida)
-    glUniform1i(basic_shader["uLightingEnabled"], 0); // Attualmente assi GL_LINES, 1 se mesh 3D
+    glUniform1i(basic_shader["uUseVertexUV"], 1);
+    glUniform1i(basic_shader["uLightingEnabled"], 1);
     glUniform1f(basic_shader["uSpecularStrength"], 0.85f);
     for (unsigned int ic = 0; ic < r.cars().size(); ++ic) {
+      CarModel& cm = car_models[rand() % car_models.size()];
+
       stack.push();
       stack.mult(r.cars()[ic].frame);
-      stack.mult(glm::translate(glm::mat4(1.f), glm::vec3(0, 0.1, 0.0)));
-      update_model_and_normal(stack.m());
-      glUniform3f(basic_shader["uColor"], -1.f, 0.6f, 0.f);
-      fram.bind();
-      glDrawArrays(GL_LINES, 0, 6);
+      stack.mult(glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(0.f, 1.f, 0.f)));
+      stack.mult(glm::scale(glm::mat4(1.f), glm::vec3(cm.scale)));
+      stack.mult(glm::translate(glm::mat4(1.f), -glm::vec3(cm.center.x, cm.bbox.min.y, cm.center.z)));
+      
+      for (unsigned int im = 0; im < cm.meshes.size(); ++im) {
+          glUniform1i(basic_shader["uUseVertexUV"], 1);
+          glActiveTexture(GL_TEXTURE0);
+          glBindTexture(GL_TEXTURE_2D, cm.meshes[im].mater.base_color_texture);
+          glUniform1i(basic_shader["uTexture"], 0);
+          glUniform1i(basic_shader["uUseTexture"], 1);
+          
+
+          stack.push();
+          stack.mult(cm.meshes[im].transform);
+          update_model_and_normal(stack.m());
+          cm.meshes[im].bind();
+          glDrawElements(cm.meshes[im]().mode, cm.meshes[im]().count, cm.meshes[im]().itype, 0);
+          stack.pop();
+      }
       stack.pop();
     }
+    glUniform1i(basic_shader["uUseVertexUV"], 0);
+    glUniform1i(basic_shader["uUseTexture"], 0);
 
     // cameramens
     glUniform1i(basic_shader["uLightingEnabled"], 0);
@@ -332,11 +410,19 @@ int main(int argc, char **argv) {
 
     // track (illuminata, asfalto satinato)
     update_model_and_normal(stack.m());
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, asphalt_tex.id);
+    glUniform1i(basic_shader["uTexture"], 1);
+    glUniform1i(basic_shader["uUseTexture"], 1);
+
     r_track.bind();
     glUniform3f(basic_shader["uColor"], 0.15f, 0.15f, 0.15f);
     glUniform1i(basic_shader["uLightingEnabled"], 1);
-    glUniform1f(basic_shader["uSpecularStrength"], 0.12f);
+    glUniform1f(basic_shader["uSpecularStrength"], 0.01f);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, r_track.vn);
+
+    glUniform1i(basic_shader["uUseTexture"], 0);
 
     // trees (wireframe/linee)
     r_trees.bind();

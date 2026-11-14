@@ -3,15 +3,20 @@ out vec4 color;
 in vec3 vColor; 
 in vec3 vViewPos;
 in vec3 vNormal;
+in vec2 vTexCoord;
+
 
 uniform vec3 uColor;
 uniform vec3 uSunDirView; // Direzione verso il Sole in View Space
 uniform float uSpecularStrength;
 uniform int uLightingEnabled; // 1 = illuminato, 0 = non illuminato (linee/debug)
+uniform sampler2D uTexture;
+uniform int uUseTexture;
+uniform float uSunIntensity;
 
 void main(void) 
 { 
-    vec3 baseColor = (uColor.x < 0.0) ? vColor : uColor;
+    vec3 baseColor = (uUseTexture == 1) ? texture(uTexture, vTexCoord).rgb : ((uColor.x < 0.0) ? vColor : uColor);
 
     // Se l'illuminazione e' disabilitata (es. linee, assi, wireframe): mostra il colore base
     if (uLightingEnabled == 0) {
@@ -50,8 +55,8 @@ void main(void)
     }
 
     // 5. Composizione finale
-    vec3 diffuseColor = baseColor * (ambient + diff * (1.0 - ambient));
-    vec3 specularColor = vec3(1.0) * spec * uSpecularStrength;
+    vec3 diffuseColor = baseColor * (ambient + diff * uSunIntensity * (1.0 - ambient));
+    vec3 specularColor = vec3(1.0) * spec * uSpecularStrength * uSunIntensity;
 
     color = vec4(diffuseColor + specularColor, 1.0);
 }

@@ -9,6 +9,7 @@
 #include "texture.h"
 #include "renderable.h"
 #include "debugging.h"
+#include <glm/gtc/quaternion.hpp>
 
 struct gltf_loader {
 
@@ -76,21 +77,35 @@ struct gltf_loader {
 	}
 
 
+	static glm::mat4 node_transform(const tinygltf::Node& node) {
+		if (!node.matrix.empty()) {
+			const auto& m = node.matrix;
+			return glm::mat4(
+				(float)m[0], (float)m[1], (float)m[2], (float)m[3],
+				(float)m[4], (float)m[5], (float)m[6], (float)m[7],
+				(float)m[8], (float)m[9], (float)m[10], (float)m[11],
+				(float)m[12], (float)m[13], (float)m[14], (float)m[15]);
+		}
+		glm::mat4 T(1.f), R(1.f), S(1.f);
+		if (node.translation.size() == 3)
+			T = glm::translate(glm::mat4(1.f), glm::vec3((float)node.translation[0], (float)node.translation[1], (float)node.translation[2]));
+		if (node.rotation.size() == 4) {
+			glm::quat q((float)node.rotation[3], (float)node.rotation[0], (float)node.rotation[1], (float)node.rotation[2]);
+			R = glm::mat4_cast(q);
+		}
+		if (node.scale.size() == 3)
+			S = glm::scale(glm::mat4(1.f), glm::vec3((float)node.scale[0], (float)node.scale[1], (float)node.scale[2]));
+		return T * R * S;
+	}
+
 	void visit_node(glm::mat4  currT, int i_node) {
 
- 
+			currT = currT * node_transform(model.nodes[i_node]);
+
 			if (model.nodes[i_node].mesh != -1)
 			{
 			
-			tinygltf::Mesh* mesh_ptr = mesh_ptr = &model.meshes[model.nodes[i_node].mesh];
-
-			const std::vector<double> & m = model.nodes[i_node].matrix;
-			glm::mat4 transform(1.f);
-			if (!m.empty())
-				transform = glm::mat4(m[0], m[1], m[2], m[3],
-					m[4], m[5], m[6], m[7],
-					m[8], m[9], m[10], m[11],
-					m[12], m[13], m[14], m[15]);
+			tinygltf::Mesh* mesh_ptr = &model.meshes[model.nodes[i_node].mesh];
 
 
 			tinygltf::Mesh & mesh = *mesh_ptr;
@@ -102,7 +117,7 @@ struct gltf_loader {
 				rs.push_back(renderable());
 				renderable & r = rs.back();
 				r.create();
-				r.transform = currT*transform;
+				r.transform = currT;
 
 				std::map<std::string, int>::const_iterator it(primitive.attributes.begin());
 				std::map<std::string, int>::const_iterator itEnd(primitive.attributes.end());
@@ -230,16 +245,8 @@ struct gltf_loader {
 				r.mater.emissive_texture = (index != -1) ? this->id_textures[index] : -1;
 			}
 		}
-		if (!model.nodes[i_node].children.empty()) {
-			const std::vector<double>& m = model.nodes[i_node].matrix;
-			if (!m.empty())
-				currT = currT * glm::mat4(m[0], m[1], m[2], m[3],
-					m[4], m[5], m[6], m[7],
-					m[8], m[9], m[10], m[11],
-					m[12], m[13], m[14], m[15]);
-			for (unsigned int ic = 0; ic < model.nodes[i_node].children.size(); ++ic)
-				visit_node(currT, model.nodes[i_node].children[ic]);
-		}
+		for (unsigned int ic = 0; ic < model.nodes[i_node].children.size(); ++ic)
+			visit_node(currT, model.nodes[i_node].children[ic]);
 	}
 
     // take a model and fill the buffers to be passed to the compute shader (for ray tracing)
@@ -268,14 +275,22 @@ struct gltf_loader {
 			}
 
 			// decode the image
-			tinygltf::BufferView bufferview = model.bufferViews[image.bufferView];
+			stbi_uc* data = nullptr;
+			bool free_data = false;
+			if (!image.image.empty()) {
+				data = image.image.data();
+			} else if (image.bufferView >= 0) {
+				tinygltf::BufferView bufferview = model.bufferViews[image.bufferView];
+				tinygltf::Buffer buffer = model.buffers[bufferview.buffer];
+				unsigned char* v_ptr = &buffer.data[bufferview.byteOffset];
 
-			tinygltf::Buffer buffer = model.buffers[bufferview.buffer];
-			unsigned char* v_ptr = &buffer.data[bufferview.byteOffset];
-
-			int x, y;
-			int  channels_in_file;
-			stbi_uc* data = stbi_load_from_memory(v_ptr, bufferview.byteLength, &x, &y, &channels_in_file, image.component);
+				int x, y;
+				int  channels_in_file;
+				data = stbi_load_from_memory(v_ptr, bufferview.byteLength, &x, &y, &channels_in_file, image.component);
+				free_data = true;
+			} else {
+				assert(0);
+			}
 
 //			stbi_write_png("read_texture.png", x, y, 4, data, 0);
 
@@ -284,10 +299,11 @@ struct gltf_loader {
 
 			glBindTexture(GL_TEXTURE_2D, id_textures.back());
 			glTexImage2D(GL_TEXTURE_2D, 0, gl_format, image.width, image.height, 0, gl_format, image.pixel_type, data);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sampler.wrapS);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, sampler.wrapT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampler.magFilter);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampler.minFilter);
+			if (free_data && data) stbi_image_free(data);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sampler.wrapS > 0 ? sampler.wrapS : GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, sampler.wrapT > 0 ? sampler.wrapT : GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampler.magFilter > 0 ? sampler.magFilter : GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampler.minFilter > 0 ? sampler.minFilter : GL_LINEAR);
 
 			if (sampler.minFilter == TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST ||
 				sampler.minFilter == TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST ||
@@ -304,7 +320,8 @@ struct gltf_loader {
 		const tinygltf::Scene& scene = model.scenes[scene_to_display];
 
 		glm::mat4 currT(1.f);
-		visit_node(currT, 0);
+		for (size_t i = 0; i < scene.nodes.size(); ++i)
+			visit_node(currT, scene.nodes[i]);
 
 		
 		for (unsigned int ir = 0; ir < rs.size(); ++ir)
