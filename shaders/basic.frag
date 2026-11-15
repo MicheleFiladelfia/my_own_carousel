@@ -1,80 +1,96 @@
-#version 330 core  
-out vec4 color; 
-in vec3 vColor; 
+#version 330 core
+
+const int MAX_LAMPS = 32;
+const float AMBIENT_STRENGTH = 0.15;
+const float SHININESS = 64.0;
+const vec3 LAMP_COLOR = vec3(1.0, 0.85, 0.55);
+const float LAMP_BOOST = 1.4;
+
+in vec3 vColor;
 in vec3 vViewPos;
 in vec3 vNormal;
 in vec2 vTexCoord;
 
+out vec4 color;
 
 uniform vec3 uColor;
-uniform vec3 uSunDirView; // Direzione verso il Sole in View Space
+uniform vec3 uSunDirView;      // Direction toward the sun in View Space
+uniform float uSunIntensity;
 uniform float uSpecularStrength;
-uniform int uLightingEnabled; // 1 = illuminato, 0 = non illuminato (linee/debug)
+uniform int uLightingEnabled;  // 1 = lit, 0 = unlit (lines/debug)
 uniform sampler2D uTexture;
 uniform int uUseTexture;
-uniform float uSunIntensity;
 uniform int uNumLamps;
-uniform vec3 uLampPosView[32];
+uniform vec3 uLampPosView[MAX_LAMPS];
 uniform float uLampRadiusView;
 
-void main(void) 
-{ 
-    vec3 baseColor = (uUseTexture == 1) ? texture(uTexture, vTexCoord).rgb : ((uColor.x < 0.0) ? vColor : uColor);
+vec3 resolveBaseColor() {
+    if (uUseTexture == 1)
+        return texture(uTexture, vTexCoord).rgb;
+    return (uColor.x < 0.0) ? vColor : uColor;
+}
 
-    // Se l'illuminazione e' disabilitata (es. linee, assi, wireframe): mostra il colore base
-    if (uLightingEnabled == 0) {
+// Returns false if degenerate geometry prevents computing a valid normal
+bool computeViewNormal(out vec3 normal) {
+    if (dot(vNormal, vNormal) > 0.001) {
+        normal = normalize(vNormal);
+        return true;
+    }
+    vec3 faceCross = cross(dFdx(vViewPos), dFdy(vViewPos));
+    if (dot(faceCross, faceCross) == 0.0)
+        return false;
+    normal = normalize(faceCross);
+    return true;
+}
+
+vec3 computeSunLight(vec3 N, vec3 V, vec3 baseColor) {
+    vec3 L = normalize(uSunDirView);
+    float diff = max(dot(N, L), 0.0);
+
+    float spec = 0.0;
+    if (diff > 0.0 && uSpecularStrength > 0.001) {
+        vec3 H = normalize(L + V);
+        spec = pow(max(dot(N, H), 0.0), SHININESS);
+    }
+
+    vec3 diffuse = baseColor * (AMBIENT_STRENGTH + diff * uSunIntensity * (1.0 - AMBIENT_STRENGTH));
+    vec3 specular = vec3(1.0) * spec * uSpecularStrength * uSunIntensity;
+    return diffuse + specular;
+}
+
+vec3 computeLampLights(vec3 N, vec3 baseColor) {
+    // Turn lamps on early at dusk and keep them on until morning
+    float lampPower = 1.0 - smoothstep(0.25, 0.85, uSunIntensity);
+    if (lampPower <= 0.001 || uLampRadiusView <= 0.0)
+        return vec3(0.0);
+
+    vec3 total = vec3(0.0);
+    int count = min(uNumLamps, MAX_LAMPS);
+    for (int i = 0; i < count; ++i) {
+        vec3 toLight = uLampPosView[i] - vViewPos;
+        float dist = length(toLight);
+        float d = dist / uLampRadiusView;
+        if (d < 1.0 && dist > 0.0001) {
+            float atten = 1.0 - d * d;
+            float diff = max(dot(N, toLight / dist), 0.0);
+            total += baseColor * LAMP_COLOR * diff * atten * lampPower * LAMP_BOOST;
+        }
+    }
+    return total;
+}
+
+void main(void) {
+    vec3 baseColor = resolveBaseColor();
+    vec3 normal;
+
+    if (uLightingEnabled == 0 || !computeViewNormal(normal)) {
         color = vec4(baseColor, 1.0);
         return;
     }
 
-    // 1. Calcolo/selezione della normale in View Space
-    vec3 normal;
-    if (dot(vNormal, vNormal) > 0.001) {
-        normal = normalize(vNormal);
-    } else {
-        vec3 crossVal = cross(dFdx(vViewPos), dFdy(vViewPos));
-        if (dot(crossVal, crossVal) == 0.0) {
-            color = vec4(baseColor, 1.0);
-            return;
-        }
-        normal = normalize(crossVal);
-    }
-
-    // 2. Vettori di luce e vista in View Space
-    // In View Space, la telecamera e' esattamente all'origine (0, 0, 0), quindi V = normalize(-vViewPos)
-    vec3 L = normalize(uSunDirView);
-    vec3 V = normalize(-vViewPos);
-
-    // 3. Componente diffusa di Lambert
-    float diff = max(dot(normal, L), 0.0);
-    float ambient = 0.15;
-
-    // 4. Componente speculare lucida di Blinn-Phong
-    vec3 H = normalize(L + V);
-    float shininess = 64.0;
-    float spec = 0.0;
-    if (diff > 0.0 && uSpecularStrength > 0.001) {
-        spec = pow(max(dot(normal, H), 0.0), shininess);
-    }
-
-    // 5. Solar light
-    vec3 diffuseColor = baseColor * (ambient + diff * uSunIntensity * (1.0 - ambient));
-    vec3 specularColor = vec3(1.0) * spec * uSpecularStrength * uSunIntensity;
-
-    vec3 totalLight = diffuseColor + specularColor;
-
-    // 6. lamps light
-    // Turn lamps on early at afternoon and keep them on until morning
-    float lampPower = 1.0 - smoothstep(0.25, 0.85, uSunIntensity);
-    for (int i = 0; i < uNumLamps; ++i) {
-        vec3 toLight = uLampPosView[i] - vViewPos;
-        float d = length(toLight) / uLampRadiusView;
-        if (d < 1.0) {
-            float atten = 1.0 - d * d;
-            float lDiff = max(dot(normal, normalize(toLight)), 0.0);
-            totalLight += baseColor * vec3(1.0, 0.85, 0.55) * lDiff * atten * lampPower * 1.4;
-        }
-    }
+    vec3 viewDir = normalize(-vViewPos); // Camera is at origin in View Space
+    vec3 totalLight = computeSunLight(normal, viewDir, baseColor)
+                    + computeLampLights(normal, baseColor);
 
     color = vec4(totalLight, 1.0);
 }

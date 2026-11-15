@@ -167,3 +167,4 @@ inline void draw_trees(shader &sh, renderable &r_trees) {
   glUniform1i(sh["uLightingEnabled"], 0);
   glDrawArrays(GL_LINES, 0, r_trees.vn);
 }
+
