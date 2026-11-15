@@ -13,6 +13,9 @@ uniform int uLightingEnabled; // 1 = illuminato, 0 = non illuminato (linee/debug
 uniform sampler2D uTexture;
 uniform int uUseTexture;
 uniform float uSunIntensity;
+uniform int uNumLamps;
+uniform vec3 uLampPosView[32];
+uniform float uLampRadiusView;
 
 void main(void) 
 { 
@@ -54,9 +57,23 @@ void main(void)
         spec = pow(max(dot(normal, H), 0.0), shininess);
     }
 
-    // 5. Composizione finale
+    // 5. Solar light
     vec3 diffuseColor = baseColor * (ambient + diff * uSunIntensity * (1.0 - ambient));
     vec3 specularColor = vec3(1.0) * spec * uSpecularStrength * uSunIntensity;
 
-    color = vec4(diffuseColor + specularColor, 1.0);
+    vec3 totalLight = diffuseColor + specularColor;
+
+    // 6. lamps light
+    float lampPower = 1.0 - uSunIntensity;
+    for (int i = 0; i < uNumLamps; ++i) {
+        vec3 toLight = uLampPosView[i] - vViewPos;
+        float d = length(toLight) / uLampRadiusView;
+        if (d < 1.0) {
+            float atten = 1.0 - d * d;
+            float lDiff = max(dot(normal, normalize(toLight)), 0.0);
+            totalLight += baseColor * vec3(1.0, 0.85, 0.55) * lDiff * atten * lampPower * 1.4;
+        }
+    }
+
+    color = vec4(totalLight, 1.0);
 }
