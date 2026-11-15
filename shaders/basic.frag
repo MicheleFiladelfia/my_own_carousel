@@ -64,7 +64,8 @@ void main(void)
     vec3 totalLight = diffuseColor + specularColor;
 
     // 6. lamps light
-    float lampPower = 1.0 - uSunIntensity;
+    // Turn lamps on early at afternoon and keep them on until morning
+    float lampPower = 1.0 - smoothstep(0.25, 0.85, uSunIntensity);
     for (int i = 0; i < uNumLamps; ++i) {
         vec3 toLight = uLampPosView[i] - vViewPos;
         float d = length(toLight) / uLampRadiusView;

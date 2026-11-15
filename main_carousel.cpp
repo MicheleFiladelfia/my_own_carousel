@@ -52,7 +52,7 @@ int main(int /*argc*/, char ** /*argv*/) {
   race r;
   carousel_loader::load("small_test.svg", "terrain_256.png", r);
   for (int i = 0; i < 10; ++i) {
-    float var = ((rand() % 100) / 100.0f - 0.5f) * 0.04f;
+    float var = ((rand() % 100) / 100.0f) * 0.04f;
     r.add_car((static_cast<float>(i) / 10.0f) + var);
   }
 
