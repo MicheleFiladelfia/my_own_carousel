@@ -15,6 +15,7 @@ uniform mat4 uView;
 uniform mat4 uModel;
 uniform mat3 uNormalMatrix; // invTransp(ModelView)
 uniform int uUseVertexUV;
+uniform float uTexScale;
 
 void main(void) {
     vec4 viewPos = uView * uModel * vec4(aPosition, 1.0);
@@ -22,7 +23,7 @@ void main(void) {
     vColor = aColor;
     vViewPos = viewPos.xyz;
     vNormal = uNormalMatrix * aNormal;
-    vTexCoord = (uUseVertexUV == 1) ? aTexCoord : (aPosition.xz * 0.03);
+    vTexCoord = (uUseVertexUV == 1) ? aTexCoord : (aPosition.xz * uTexScale);
 
     gl_Position = uProj * viewPos;
 }

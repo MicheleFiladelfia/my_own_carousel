@@ -50,7 +50,7 @@ int main(int /*argc*/, char ** /*argv*/) {
 
   // Load track and populate cars
   race r;
-  carousel_loader::load("small_test.svg", "terrain_256.png", r);
+  carousel_loader::load("map/map.svg", "map/terrain_256.png", r);
   for (int i = 0; i < 10; ++i) {
     float var = ((rand() % 100) / 100.0f) * 0.04f;
     r.add_car((static_cast<float>(i) / 10.0f) + var);
@@ -67,13 +67,11 @@ int main(int /*argc*/, char ** /*argv*/) {
 
   // Build scene geometry
   renderable fram = shape_maker::frame();
-  renderable r_track, r_terrain, r_trees;
+  renderable r_track, r_terrain;
   r_track.create();
   game_to_renderable::to_track(r, r_track);
   r_terrain.create();
   game_to_renderable::to_heightfield(r, r_terrain);
-  r_trees.create();
-  game_to_renderable::to_tree(r, r_trees);
 
   SunRay sun_ray;
   sun_ray.create();
@@ -94,12 +92,32 @@ int main(int /*argc*/, char ** /*argv*/) {
   for (const auto &file : car_files)
     car_models.push_back(load_gltf_model(file, 3.5f));
 
-  GltfModel lamp_model = load_gltf_model("3dmodels/street_lamp/street_lamp_01_1k.gltf", 2.5f);
+  GltfModel lamp_model = load_gltf_model("3dmodels/Lamps/street_lamp_01_1k.gltf", 2.5f);
+
+  std::vector<GltfModel> trees_models;
+  std::vector<std::string> tree_files = {
+      "3dmodels/Nature/CommonTree_1.gltf", "3dmodels/Nature/CommonTree_2.gltf",
+      "3dmodels/Nature/CommonTree_3.gltf", "3dmodels/Nature/CommonTree_4.gltf",
+      "3dmodels/Nature/Pine_1.gltf",       "3dmodels/Nature/Pine_2.gltf",
+      "3dmodels/Nature/Pine_3.gltf",       "3dmodels/Nature/Pine_4.gltf",
+      "3dmodels/Nature/TwistedTree_1.gltf","3dmodels/Nature/TwistedTree_2.gltf"};
+  std::vector<std::string> plant_files = {
+      "3dmodels/Nature/Bush_Common.gltf",
+      "3dmodels/Nature/Bush_Common_Flowers.gltf",
+      "3dmodels/Nature/Plant_1_Big.gltf",
+      "3dmodels/Nature/Plant_7_Big.gltf",
+      "3dmodels/Nature/Fern_1.gltf"};
+  trees_models.reserve(tree_files.size() + plant_files.size());
+  for (const auto &file : tree_files)
+    trees_models.push_back(load_gltf_model(file, 8.0f));
+  for (const auto &file : plant_files)
+    trees_models.push_back(load_gltf_model(file, 3.5f));
+
 
   // Load terrain and road textures
   texture grass_tex, asphalt_tex;
-  grass_tex.load("grass_texture.jpg", 0);
-  asphalt_tex.load("asphalt_texture.png", 1);
+  grass_tex.load("Textures/grass_texture.jpg", 0);
+  asphalt_tex.load("Textures/road.jpg", 1);
 
   r.start(18, 30, 0, 900);
   r.update();
@@ -151,7 +169,7 @@ int main(int /*argc*/, char ** /*argv*/) {
     draw_cars(basic_shader, cam.view, stack, r, car_models);
     draw_cameramen(basic_shader, cam.view, stack, r, fram);
     draw_track(basic_shader, cam.view, stack.m(), r_track, asphalt_tex);
-    draw_trees(basic_shader, r_trees);
+    draw_trees(basic_shader, cam.view, stack, r, trees_models);
     draw_lamps(basic_shader, cam.view, stack, r, lamp_model);
 
     stack.pop();

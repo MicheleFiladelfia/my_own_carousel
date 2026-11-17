@@ -72,6 +72,7 @@ inline void draw_terrain(shader &sh, const glm::mat4 &view,
                          const glm::mat4 &model, renderable &r_terrain,
                          const texture &grass_tex) {
   glUniform1i(sh["uUseVertexUV"], 0);
+  glUniform1f(sh["uTexScale"], 0.1f);
   glEnable(GL_POLYGON_OFFSET_FILL);
   glPolygonOffset(1.0f, 1.0f);
   update_model_and_normal(sh, view, model);
@@ -100,10 +101,12 @@ inline void draw_track(shader &sh, const glm::mat4 &view,
   glUniform1i(sh["uUseTexture"], 1);
 
   r_track.bind();
+  glUniform1i(sh["uUseVertexUV"], 1);
   glUniform3f(sh["uColor"], 0.15f, 0.15f, 0.15f);
   glUniform1i(sh["uLightingEnabled"], 1);
   glUniform1f(sh["uSpecularStrength"], 0.01f);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, r_track.vn);
+  glUniform1i(sh["uUseVertexUV"], 0);
   glUniform1i(sh["uUseTexture"], 0);
 }
 
@@ -130,13 +133,13 @@ inline void draw_lamps(shader &sh, const glm::mat4 &view,
                        matrix_stack &stack, const race &r,
                        GltfModel &lamp_model) {
   glUniform1i(sh["uLightingEnabled"], 1);
-  glUniform1f(sh["uSpecularStrength"], 0.85f);
+  glUniform1f(sh["uSpecularStrength"], 0.2f);
 
   auto update_fn = [&](const glm::mat4 &m) { update_model_and_normal(sh, view, m); };
   for (const auto &lamp : r.lamps()) {
     stack.push();
     stack.mult(glm::translate(glm::mat4(1.f), lamp.pos));
-    draw_gltf_model(lamp_model, sh, stack, update_fn, false);
+    draw_gltf_model(lamp_model, sh, stack, update_fn, false, 1);
     stack.pop();
   }
 
@@ -161,10 +164,21 @@ inline void draw_cameramen(shader &sh, const glm::mat4 &view,
   }
 }
 
-inline void draw_trees(shader &sh, renderable &r_trees) {
-  r_trees.bind();
-  glUniform3f(sh["uColor"], 0.f, 1.0f, 0.f);
-  glUniform1i(sh["uLightingEnabled"], 0);
-  glDrawArrays(GL_LINES, 0, r_trees.vn);
+inline void draw_trees(shader &sh, const glm::mat4 &view, matrix_stack &stack,
+                       const race &r, std::vector<GltfModel> &trees_models) {
+  glUniform1i(sh["uLightingEnabled"], 1);
+  glUniform1f(sh["uSpecularStrength"], 0.15f);
+
+  auto update_fn = [&](const glm::mat4 &m) { update_model_and_normal(sh, view, m); };
+  for (const auto &tree : r.trees()) {
+    GltfModel &plant = trees_models[rand() % trees_models.size()];
+    stack.push();
+    stack.mult(glm::translate(glm::mat4(1.f), tree.pos));
+    draw_gltf_model(plant, sh, stack, update_fn, false);
+    stack.pop();
+  }
+
+  glUniform1i(sh["uUseVertexUV"], 0);
+  glUniform1i(sh["uUseTexture"], 0);
 }
 

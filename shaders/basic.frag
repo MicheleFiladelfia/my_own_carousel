@@ -23,10 +23,15 @@ uniform int uUseTexture;
 uniform int uNumLamps;
 uniform vec3 uLampPosView[MAX_LAMPS];
 uniform float uLampRadiusView;
+uniform vec3 uEmissive;
 
 vec3 resolveBaseColor() {
-    if (uUseTexture == 1)
-        return texture(uTexture, vTexCoord).rgb;
+    if (uUseTexture == 1) {
+        vec4 tex = texture(uTexture, vTexCoord);
+        if (tex.a < 0.5)
+            discard;
+        return tex.rgb;
+    }
     return (uColor.x < 0.0) ? vColor : uColor;
 }
 
@@ -60,7 +65,7 @@ vec3 computeSunLight(vec3 N, vec3 V, vec3 baseColor) {
 
 vec3 computeLampLights(vec3 N, vec3 baseColor) {
     // Turn lamps on early at dusk and keep them on until morning
-    float lampPower = 1.0 - smoothstep(0.25, 0.85, uSunIntensity);
+    float lampPower = (1.0 - smoothstep(0.25, 0.85, uSunIntensity))*0.40;
     if (lampPower <= 0.001 || uLampRadiusView <= 0.0)
         return vec3(0.0);
 
@@ -76,7 +81,7 @@ vec3 computeLampLights(vec3 N, vec3 baseColor) {
             total += baseColor * LAMP_COLOR * diff * atten * lampPower * LAMP_BOOST;
         }
     }
-    return total;
+    return total + uEmissive;
 }
 
 void main(void) {
@@ -89,8 +94,10 @@ void main(void) {
     }
 
     vec3 viewDir = normalize(-vViewPos); // Camera is at origin in View Space
+    float lampPower = 1.0 - smoothstep(0.25, 0.85, uSunIntensity);
     vec3 totalLight = computeSunLight(normal, viewDir, baseColor)
-                    + computeLampLights(normal, baseColor);
+                    + computeLampLights(normal, baseColor)
+                    + uEmissive * lampPower;
 
     color = vec4(totalLight, 1.0);
 }

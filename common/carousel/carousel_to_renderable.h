@@ -16,9 +16,11 @@ struct game_to_renderable {
 		
 		std::vector<float> buffer_pos;
 		std::vector<float> buffer_norm;
+		std::vector<float> buffer_uv;
 		const size_t n = r.t().curbs[0].size();
 		buffer_pos.resize((n + 1) * 2 * 3);
 		buffer_norm.resize((n + 1) * 2 * 3);
+		buffer_uv.resize((n + 1) * 2 * 2);
 		const float TRACK_Y_OFFSET = 0.05f;
 		for (unsigned int i = 0; i <= n; ++i) {
 			glm::vec3 c0 = r.t().curbs[0][i % n];
@@ -27,6 +29,12 @@ struct game_to_renderable {
 			c1.y += TRACK_Y_OFFSET;
 			ct(&buffer_pos[(2 * i  ) * 3], c0);
 			ct(&buffer_pos[(2 * i+1) * 3], c1);
+
+			float v = (static_cast<float>(i) / static_cast<float>(n)) * 50.0f;
+			buffer_uv[(2 * i    ) * 2]     = 0.0f;
+			buffer_uv[(2 * i    ) * 2 + 1] = v;
+			buffer_uv[(2 * i + 1) * 2]     = 1.0f;
+			buffer_uv[(2 * i + 1) * 2 + 1] = v;
 
 			glm::vec3 c0_prev = r.t().curbs[0][(i + n - 1) % n];
 			glm::vec3 c0_next = r.t().curbs[0][(i + 1) % n];
@@ -39,6 +47,7 @@ struct game_to_renderable {
 
 		r_t.add_vertex_attribute<float>(&buffer_pos[0], static_cast<unsigned int>(buffer_pos.size()), 0, 3);
 		r_t.add_vertex_attribute<float>(&buffer_norm[0], static_cast<unsigned int>(buffer_norm.size()), 2, 3);
+		r_t.add_vertex_attribute<float>(&buffer_uv[0], static_cast<unsigned int>(buffer_uv.size()), 4, 2);
 	}
 
 	static void to_stick_object(const std::vector<stick_object>& vec, renderable& r_t) {

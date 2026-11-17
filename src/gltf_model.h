@@ -33,7 +33,8 @@ template <typename UpdateMatricesFn>
 inline void draw_gltf_model(GltfModel &model, shader &sh,
                             matrix_stack &stack,
                             UpdateMatricesFn &&update_matrices,
-                            bool rotate_y_180 = false) {
+                            bool rotate_y_180 = false,
+                            int emissive_mesh_idx = -1) {
   stack.push();
   if (rotate_y_180)
     stack.mult(glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(0.f, 1.f, 0.f)));
@@ -41,7 +42,13 @@ inline void draw_gltf_model(GltfModel &model, shader &sh,
   stack.mult(glm::translate(glm::mat4(1.f),
                             -glm::vec3(model.center.x, model.bbox.min.y, model.center.z)));
 
-  for (auto &mesh : model.meshes) {
+  for (size_t i = 0; i < model.meshes.size(); ++i) {
+    auto &mesh = model.meshes[i];
+    if (static_cast<int>(i) == emissive_mesh_idx)
+      glUniform3f(sh["uEmissive"], 1.0f, 0.85f, 0.45f);
+    else
+      glUniform3f(sh["uEmissive"], 0.0f, 0.0f, 0.0f);
+
     glUniform1i(sh["uUseVertexUV"], 1);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mesh.mater.base_color_texture);
@@ -55,6 +62,7 @@ inline void draw_gltf_model(GltfModel &model, shader &sh,
     glDrawElements(mesh().mode, mesh().count, mesh().itype, 0);
     stack.pop();
   }
+  glUniform3f(sh["uEmissive"], 0.0f, 0.0f, 0.0f);
 
   stack.pop();
 }
