@@ -113,6 +113,7 @@ int main(int /*argc*/, char ** /*argv*/) {
   for (const auto &file : plant_files)
     trees_models.push_back(load_gltf_model(file, 3.5f));
 
+  GltfModel cameraman_model = load_gltf_model("3dmodels/camera-drone/source/drone.glb", 3.5f);
 
   // Load terrain and road textures
   texture grass_tex, asphalt_tex;
@@ -158,6 +159,7 @@ int main(int /*argc*/, char ** /*argv*/) {
     glUniform3f(basic_shader["uColor"], 0.f, 0.f, 1.f);
     sun_ray.draw(r.sunlight_direction());
 
+    glm::mat4 cm_norm = r.cameramen()[idx].frame;
     // Normalize world scale and center
     float s = 1.f / r.bbox().diagonal();
     stack.mult(glm::scale(glm::mat4(1.f), glm::vec3(s)));
@@ -167,7 +169,7 @@ int main(int /*argc*/, char ** /*argv*/) {
     upload_lamp_lights(basic_shader, r, lamp_model, cam.view, stack.m());
     draw_terrain(basic_shader, cam.view, stack.m(), r_terrain, grass_tex);
     draw_cars(basic_shader, cam.view, stack, r, car_models);
-    draw_cameramen(basic_shader, cam.view, stack, r, fram);
+    draw_cameramen(basic_shader, cam.view, stack, r, cameraman_model);
     draw_track(basic_shader, cam.view, stack.m(), r_track, asphalt_tex);
     draw_trees(basic_shader, cam.view, stack, r, trees_models);
     draw_lamps(basic_shader, cam.view, stack, r, lamp_model);

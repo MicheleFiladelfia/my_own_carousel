@@ -148,20 +148,22 @@ inline void draw_lamps(shader &sh, const glm::mat4 &view,
 }
 
 inline void draw_cameramen(shader &sh, const glm::mat4 &view,
-                           matrix_stack &stack, const race &r, renderable &fram) {
-  glUniform1i(sh["uLightingEnabled"], 0);
-  glUniform1f(sh["uSpecularStrength"], 0.2f);
-  fram.bind();
+                           matrix_stack &stack, const race &r,
+                           GltfModel &cameraman_model) {
+  glUniform1i(sh["uLightingEnabled"], 1);
+  glUniform1f(sh["uSpecularStrength"], 0.35f);
 
+  auto update_fn = [&](const glm::mat4 &m) { update_model_and_normal(sh, view, m); };
   for (const auto &cm : r.cameramen()) {
     stack.push();
     stack.mult(cm.frame);
-    stack.mult(glm::scale(glm::mat4(1.f), glm::vec3(4.f)));
-    update_model_and_normal(sh, view, stack.m());
-    glUniform3f(sh["uColor"], -1.f, 0.6f, 0.f);
-    glDrawArrays(GL_LINES, 0, 6);
+    stack.mult(glm::translate(glm::mat4(1.f), glm::vec3(0.f, 3.0f, 0.f)));
+    draw_gltf_model(cameraman_model, sh, stack, update_fn, false);
     stack.pop();
   }
+
+  glUniform1i(sh["uUseVertexUV"], 0);
+  glUniform1i(sh["uUseTexture"], 0);
 }
 
 inline void draw_trees(shader &sh, const glm::mat4 &view, matrix_stack &stack,
