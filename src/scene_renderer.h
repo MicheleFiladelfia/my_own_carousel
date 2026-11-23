@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -49,7 +50,7 @@ inline void update_model_and_normal(shader &sh, const glm::mat4 &view,
   glUniformMatrix3fv(sh["uNormalMatrix"], 1, GL_FALSE, &normal_matrix[0][0]);
 }
 
-// Uploads lamp point lights in View Space (radius scaled with current stack)
+// Uploads street lamp point lights in View Space
 inline void upload_lamp_lights(shader &sh, const race &r,
                                const GltfModel &lamp_model,
                                const glm::mat4 &view, const glm::mat4 &scene_model) {
@@ -66,6 +67,37 @@ inline void upload_lamp_lights(shader &sh, const race &r,
   glUniform1f(sh["uLampRadiusView"], 12.0f * glm::length(glm::vec3(scene_model[0])));
   if (num_lamps > 0)
     glUniform3fv(sh["uLampPosView"], num_lamps, &lamp_pos_view[0][0]);
+}
+
+// Uploads car headlight spotlights (2 per car) in View Space
+inline void upload_headlights(shader &sh, const race &r,
+                              const glm::mat4 &view, const glm::mat4 &scene_model) {
+  int num_cars = std::min(static_cast<int>(r.cars().size()), 16); // max 32 headlights
+  std::vector<glm::vec3> pos_view;
+  std::vector<glm::vec3> dir_view;
+  pos_view.reserve(num_cars * 2);
+  dir_view.reserve(num_cars * 2);
+
+  glm::mat4 mv_scene = view * scene_model;
+  glm::vec3 local_dir = glm::normalize(glm::vec3(0.f, -0.15f, -1.f));
+  const float offsets_x[2] = {-0.45f, 0.45f};
+
+  for (int i = 0; i < num_cars; ++i) {
+    glm::mat4 mv_car = mv_scene * r.cars()[i].frame;
+    glm::vec3 d = glm::normalize(glm::mat3(mv_car) * local_dir);
+    for (float ox : offsets_x) {
+      pos_view.push_back(glm::vec3(mv_car * glm::vec4(ox, 0.5f, -1.4f, 1.f)));
+      dir_view.push_back(d);
+    }
+  }
+
+  int count = static_cast<int>(pos_view.size());
+  glUniform1i(sh["uNumHeadlights"], count);
+  glUniform1f(sh["uHeadlightRadiusView"], 18.0f * glm::length(glm::vec3(scene_model[0])));
+  if (count > 0) {
+    glUniform3fv(sh["uHeadlightPosView"], count, &pos_view[0][0]);
+    glUniform3fv(sh["uHeadlightDirView"], count, &dir_view[0][0]);
+  }
 }
 
 inline void draw_terrain(shader &sh, const glm::mat4 &view,

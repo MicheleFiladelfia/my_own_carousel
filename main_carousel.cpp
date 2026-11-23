@@ -159,14 +159,14 @@ int main(int /*argc*/, char ** /*argv*/) {
     glUniform3f(basic_shader["uColor"], 0.f, 0.f, 1.f);
     sun_ray.draw(r.sunlight_direction());
 
-    glm::mat4 cm_norm = r.cameramen()[idx].frame;
     // Normalize world scale and center
     float s = 1.f / r.bbox().diagonal();
     stack.mult(glm::scale(glm::mat4(1.f), glm::vec3(s)));
     stack.mult(glm::translate(glm::mat4(1.f), -r.bbox().center()));
 
-    // Upload lamp lights and draw scene
+    // Upload lamp lights and car headlights, then draw scene
     upload_lamp_lights(basic_shader, r, lamp_model, cam.view, stack.m());
+    upload_headlights(basic_shader, r, cam.view, stack.m());
     draw_terrain(basic_shader, cam.view, stack.m(), r_terrain, grass_tex);
     draw_cars(basic_shader, cam.view, stack, r, car_models);
     draw_cameramen(basic_shader, cam.view, stack, r, cameraman_model);
